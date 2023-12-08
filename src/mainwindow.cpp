@@ -13,6 +13,10 @@
 #include <QApplication>                 // quit
 #include <QShortcut>
 #include <QProcess>
+#include <stdio.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include "deviceinputdialog.h"
 
 
 /* Sets up the main application window and all of its children/widgets.
@@ -854,9 +858,8 @@ void MainWindow::on_actionCompileRiscVTriggered()
     QProcess *proc;
     proc = new QProcess(this);
     work_dir = QFileDialog::getExistingDirectory(this, tr("Choose where Make is"), "$HOME", QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
-    qInfo() << work_dir << endl;
     proc->setWorkingDirectory(work_dir);
-    proc->start("make", {}, QProcess::Unbuffered | QProcess::ReadOnly);
+    proc->start("make", {"tetris", "TARGET=scmb"}, QProcess::Unbuffered | QProcess::ReadOnly);
     proc->waitForFinished();
     QString output(proc->readAllStandardOutput());
     QMessageBox compileResults(this);
@@ -873,9 +876,61 @@ void MainWindow::on_actionUploadToSCMBTriggered()
     if (bin_file_location.isEmpty())
     {
         // Bin File not found. Warn user
+        QMessageBox errorMessage(this);
+        errorMessage.setText("Error: File not found.");
+        errorMessage.setWindowTitle("Error opening bin file");
+        errorMessage.exec();
         return;
     }
     // Load binary using whatever call needs to be made to Isaac.
+    // Can be either a QFile or whatever is going to work for Isaac's solution.
+    // binary files are raw 1s and 0s. There is a list location that is in the same directory that contains the asm
+    QString lst_file_location = bin_file_location.replace(bin_file_location.size()-3, bin_file_location.size(), "lst");
+    // open the lst file as the replace does work correctly
+    bool openInCurrentTab = editor->isUntitled() && !editor->isUnsaved();
+    QFile file(lst_file_location);
+    if (!file.open(QIODevice::ReadOnly | QFile::Text))
+    {
+        QMessageBox::warning(this, "Warning", "Cannot open lst file: " + file.errorString());
+        return;
+    }
+
+    QTextStream in(&file);
+    QString documentContents = in.readAll();
+
+    if (!openInCurrentTab)
+    {
+        tabbedEditor->add(new Editor());
+    }
+    editor->setCurrentFilePath(lst_file_location);
+    editor->setPlainText(documentContents);
+    file.close();
+
+    editor->setModifiedState(false);
+    updateTabAndWindowTitle();
+    setLanguageFromExtension();
+
+    // Get the device name
+    QString deviceName = "/dev/ttyACM0";
+    QString newDeviceName = DeviceInputDialog::getText();
+    if (!newDeviceName.isEmpty())
+        deviceName = newDeviceName;
+    // Open up a new process calling Isaac's "main"
+    QProcess *proc = new QProcess(this);
+    if (memoryProcess == nullptr)
+    {
+        memoryProcess = new MemoryTerminal(nullptr, proc);
+    }
+    connect(proc, SIGNAL(readyReadStandardOutput()), memoryProcess, SLOT(reportCurrentProcess()));
+    memoryProcess->show();
+    //
+    proc->setWorkingDirectory("~/Desktop/Senior Project/ComputerSideInterface/");
+    proc->start("main", {deviceName, bin_file_location}, QProcess::Unbuffered | QProcess::ReadOnly);
+
+}
+
+void MainWindow::reportMessage()
+{
 
 }
 
