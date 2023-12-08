@@ -25,6 +25,7 @@ DEFINES += QT_DEPRECATED_WARNINGS
 CONFIG += c++11
 
 SOURCES += \
+    communicator.cpp \
     highlighters/highlighter.cpp \
     highlighters/chighlighter.cpp \
     highlighters/cpphighlighter.cpp \
